@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plagiarism Detection System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .tab-button.active {
+            background-color: #4f46e5; /* A shade of blue/indigo */
+            color: white;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen p-4">
+    <div class="container mx-auto max-w-4xl">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-white mb-2">🔍 Plagiarism Detection System</h1>
+            <p class="text-white/80 text-lg">Check your text for potential plagiarism against our reference database</p>
+        </div>
+
+        <div class="bg-white rounded-2xl card-shadow p-8 mb-8">
+            <div class="flex mb-6 bg-gray-100 rounded-lg p-1">
+                <button id="textTab" onclick="switchTab('text')" 
+                        class="flex-1 py-2 px-4 rounded-md font-medium transition-all duration-200 tab-button">
+                    📝 Type or Paste Text
+                </button>
+                <button id="fileTab" onclick="switchTab('file')" 
+                        class="flex-1 py-2 px-4 rounded-md font-medium transition-all duration-200 tab-button">
+                    📁 Upload File
+                </button>
+            </div>
+
+            <div id="textSection" class="input-section">
+                <label for="textInput" class="block text-gray-700 font-semibold mb-3">Enter your text:</label>
+                <textarea id="textInput" 
+                          placeholder="Type or paste your text here... (minimum 10 words recommended)"
+                          class="w-full h-48 p-4 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 resize-none transition-all duration-200"
+                ></textarea>
+                <div class="text-sm text-gray-500 mt-2 text-right">
+                    Word count: <span id="wordCount">0</span>
+                </div>
+            </div>
+
+            <div id="fileSection" class="input-section hidden">
+                <label class="block text-gray-700 font-semibold mb-3">Upload a file:</label>
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-indigo-400 transition-colors duration-200">
+                    <input type="file" id="fileInput" accept=".txt,.pdf,.docx" class="hidden" onchange="handleFileSelect(event)">
+                    <label for="fileInput" class="cursor-pointer">
+                        <div class="text-4xl mb-4">📁</div>
+                        <div class="text-lg font-medium text-gray-700 mb-2">Click to upload or drag and drop</div>
+                        <div class="text-sm text-gray-500">Supports TXT, PDF, and DOCX files</div>
+                    </label>
+                </div>
+                <div id="fileInfo" class="mt-4 p-3 bg-indigo-50 rounded-lg hidden">
+                    <div class="flex items-center justify-between">
+                        <span id="fileName" class="font-medium text-indigo-800"></span>
+                        <button onclick="clearFile()" class="text-indigo-600 hover:text-indigo-800 text-sm font-semibold">Clear</button>
+                    </div>
+                    <div id="fileSize" class="text-sm text-indigo-600 mt-1"></div>
+                </div>
+            </div>
+
+            <button id="checkButton" onclick="checkPlagiarism()" 
+                    class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-4 px-6 rounded-lg text-lg hover:from-blue-600 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 mt-6 disabled:opacity-50 disabled:cursor-not-allowed">
+                🔍 Check for Plagiarism
+            </button>
+        </div>
+
+        <div id="resultsSection" class="bg-white rounded-2xl card-shadow p-8 hidden">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">Results</h2>
+            
+            <div id="scoreDisplay" class="text-center mb-6">
+                </div>
+
+            <div id="detailedResults" class="space-y-4">
+                </div>
+
+            <div class="flex gap-4 mt-8">
+                <button onclick="clearAll()" 
+                        class="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200">
+                    🔄 Check Another Text
+                </button>
+                <button onclick="downloadResults()" 
+                        class="flex-1 bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200">
+                    💾 Download Results
+                </button>
+            </div>
+        </div>
+
+        <div id="loadingSpinner" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-8 text-center card-shadow">
+                <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500 mx-auto mb-4"></div>
+                <div class="text-lg font-medium text-gray-700">Analyzing your text...</div>
+                <div class="text-sm text-gray-500 mt-2">This may take a few seconds</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentTab = 'text';
+        let currentFile = null;
+        let currentResults = null;
+
+        // --- Tab Management ---
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            const textTab = document.getElementById('textTab');
+            const fileTab = document.getElementById('fileTab');
+            const textSection = document.getElementById('textSection');
+            const fileSection = document.getElementById('fileSection');
+
+            if (tab === 'text') {
+                textTab.classList.add('active');
+                fileTab.classList.remove('active');
+                textSection.classList.remove('hidden');
+                fileSection.classList.add('hidden');
+            } else {
+                fileTab.classList.add('active');
+                textTab.classList.remove('active');
+                fileSection.classList.remove('hidden');
+                textSection.classList.add('hidden');
+            }
+            
+            // Hide results when switching tabs
+            hideResults();
+        }
+
+        // --- File Handling ---
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                currentFile = file;
+                displayFileInfo(file);
+                hideResults();
+            }
+        }
+
+        function displayFileInfo(file) {
+            document.getElementById('fileInfo').classList.remove('hidden');
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = `Size: ${(file.size / 1024).toFixed(1)} KB`;
+        }
+
+        function clearFile() {
+            currentFile = null;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('fileInfo').classList.add('hidden');
+            hideResults();
+        }
+
+        // --- Word Count ---
+        document.getElementById('textInput').addEventListener('input', function() {
+            const text = this.value.trim();
+            const words = text === '' ? 0 : text.split(/\s+/).length;
+            document.getElementById('wordCount').textContent = words;
+        });
+
+        // --- Core Plagiarism Check Logic ---
+        async function checkPlagiarism() {
+            let textContent = '';
+            
+            if (currentTab === 'text') {
+                textContent = document.getElementById('textInput').value.trim();
+                if (textContent.length < 20) {
+                    alert('Please enter at least 20 characters for a meaningful analysis.');
+                    return;
+                }
+            } else if (currentTab === 'file') {
+                if (!currentFile) {
+                    alert('Please select a file first.');
+                    return;
+                }
+                // For now, we'll only handle plain text files as a demonstration
+                if (currentFile.type === 'text/plain') {
+                    textContent = await readTextFile(currentFile);
+                } else {
+                    alert('File support for PDF and DOCX is a feature for the backend to handle. For this demo, please use a .txt file.');
+                    return;
+                }
+            }
+
+            if (!textContent) {
+                alert('No text content to analyze.');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const response = await fetch('http://localhost:8080/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `text=${encodeURIComponent(textContent)}`
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                currentResults = data; // Store results for download
+                displayResults(data);
+                
+            } catch (error) {
+                console.error('Error checking plagiarism:', error);
+                showError('Could not connect to the backend server. Please ensure your Java server is running on localhost:8080 and try again.');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function readTextFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(e);
+                reader.readAsText(file);
+            });
+        }
+
+        // --- UI Updates (Results, Loading, Errors) ---
+        function displayResults(data) {
+            const resultsSection = document.getElementById('resultsSection');
+            const scoreDisplay = document.getElementById('scoreDisplay');
+            const detailedResults = document.getElementById('detailedResults');
+            
+            const percentage = data.percentage;
+            let scoreClass, scoreIcon, scoreText;
+            
+            if (percentage >= 70) {
+                scoreClass = 'bg-red-100 text-red-800 border-red-200'; scoreIcon = '🚨'; scoreText = 'HIGH RISK';
+            } else if (percentage >= 40) {
+                scoreClass = 'bg-orange-100 text-orange-800 border-orange-200'; scoreIcon = '⚠️'; scoreText = 'MODERATE RISK';
+            } else if (percentage >= 10) {
+                scoreClass = 'bg-yellow-100 text-yellow-800 border-yellow-200'; scoreIcon = '⚡'; scoreText = 'LOW RISK';
+            } else {
+                scoreClass = 'bg-green-100 text-green-800 border-green-200'; scoreIcon = '✅'; scoreText = 'LOOKS ORIGINAL';
+            }
+
+            scoreDisplay.innerHTML = `
+                <div class="inline-block ${scoreClass} border-2 rounded-full px-8 py-4">
+                    <div class="text-5xl mb-2">${scoreIcon}</div>
+                    <div class="text-2xl font-bold mb-1">${scoreText}</div>
+                    <div class="text-4xl font-bold">${percentage.toFixed(1)}%</div>
+                    <div class="text-sm font-medium">Similarity Detected</div>
+                </div>`;
+
+            detailedResults.innerHTML = `
+                <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <h3 class="font-semibold text-gray-800 mb-2">Analysis Summary:</h3>
+                    <p class="text-gray-600">${data.message}</p>
+                </div>`;
+
+            resultsSection.classList.remove('hidden');
+            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        
+        function showError(message) {
+            const resultsSection = document.getElementById('resultsSection');
+            const scoreDisplay = document.getElementById('scoreDisplay');
+            const detailedResults = document.getElementById('detailedResults');
+            
+            scoreDisplay.innerHTML = `
+                <div class="inline-block bg-red-100 text-red-800 border-2 border-red-200 rounded-full px-8 py-4">
+                    <div class="text-5xl mb-2">❌</div>
+                    <div class="text-2xl font-bold">Error</div>
+                </div>`;
+            
+            detailedResults.innerHTML = `
+                <div class="bg-red-50 rounded-lg p-4 border border-red-200">
+                    <p class="text-red-700 font-medium">${message}</p>
+                </div>`;
+            
+            resultsSection.classList.remove('hidden');
+            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function showLoading(isLoading) {
+            document.getElementById('loadingSpinner').classList.toggle('hidden', !isLoading);
+        }
+
+        function hideResults() {
+            document.getElementById('resultsSection').classList.add('hidden');
+            currentResults = null;
+        }
+        
+        function clearAll() {
+            document.getElementById('textInput').value = '';
+            document.getElementById('wordCount').textContent = '0';
+            clearFile();
+            hideResults();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // --- Download Results ---
+        function downloadResults() {
+            if (!currentResults) {
+                alert('No results to download.');
+                return;
+            }
+            
+            const content = `Plagiarism Detection Report\n` +
+                          `===========================\n\n` +
+                          `Date: ${new Date().toLocaleString()}\n` +
+                          `Similarity Score: ${currentResults.percentage.toFixed(1)}%\n` +
+                          `Summary: ${currentResults.message}\n`;
+            
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'plagiarism-report.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Initialize the page on load
+        document.addEventListener('DOMContentLoaded', () => {
+            switchTab('text');
+        });
+    </script>
+</body>
+</html>
